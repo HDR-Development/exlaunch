@@ -36,6 +36,14 @@ static const std::uint8_t SVC_QUERY_MEMORY_BYTES[] = {
     0xe1, 0x0f, 0x1f, 0xf8, 0xc1, 0x00, 0x00, 0xd4
 };
 
+static const std::uint8_t HOST_SERVICE[] = {
+    0xfd, 0x7b, 0xbc, 0xa9, 0xf7, 0x0b, 0x00, 0xf9, 0xfd, 0x03, 0x00, 0x91, 0xf6, 0x57, 0x02, 0xa9, 0xf4, 0x4f, 0x03, 0xa9, 0xf7, 0x03, 0x04, 0xaa, 0xf4, 0x03, 0x03, 0x2a
+};
+
+static const std::uint8_t SET_SLEEP[] = {
+    0xfd, 0x7b, 0xbd, 0xa9, 0xf5, 0x0b, 0x00, 0xf9, 0xfd, 0x03, 0x00, 0x91, 0xf4, 0x4f, 0x02, 0xa9, 0x13, 0x40, 0x00, 0x91, 0xf4, 0x03, 0x00, 0xaa, 0xe0, 0x03, 0x13, 0xaa,
+};
+
 static std::uint8_t LAST_PACKET[37] = { 0 };
 
 
@@ -230,14 +238,20 @@ extern "C" void exl_main(void* x0, void* x1) {
     auto map_gc_stick = find_offset(MAP_GC_STICK_BYTES, sizeof(MAP_GC_STICK_BYTES));
     if (map_gc_stick == 0)
         s_WereHooksInstalled = false;
+    auto host_service = find_offset(HOST_SERVICE, sizeof(HOST_SERVICE));
+    if (host_service == 0)
+        s_WereHooksInstalled = false;
+    auto set_sleep = find_offset(SET_SLEEP, sizeof(SET_SLEEP));
+    if (set_sleep == 0)
+        s_WereHooksInstalled = false;
 
-    exl::hook::HookFunc(query_mem_offset, svcQueryMemoryHook, false);
 
-    if (s_WereHooksInstalled)
+    if (s_WereHooksInstalled) {
+        exl::hook::HookFunc(query_mem_offset, svcQueryMemoryHook, false);
         mapGcStickOriginal = exl::hook::HookFunc(map_gc_stick, mapGcStick, true);
-    HostServiceOriginal = exl::hook::HookFunc(0x105600, HostServiceHook, true);
-    ParseGcPacketOriginal = exl::hook::HookFunc(0x1132f0, ParseGcPacketHook, true);
-    SetSleepOrig = exl::hook::HookFunc(0x7efa8, SetSleepHook, true);
+        HostServiceOriginal = exl::hook::HookFunc(host_service, HostServiceHook, true);
+        SetSleepOrig = exl::hook::HookFunc(set_sleep, SetSleepHook, true);
+    }
     /* Install the hook at the provided function pointer. Function type is checked against the callback function. */
 
     /* Alternative install funcs: */
