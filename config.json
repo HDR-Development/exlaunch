@@ -1,28 +1,28 @@
 {
-	"name":	"Application",
-	"title_id":	"0x0100801011c3e000",
-	"title_id_range_min":	"0x0100000000010000",
-	"title_id_range_max":	"0x01ffffffffffffff",
-	"main_thread_stack_size":	"0x00100000",
-	"main_thread_priority":	44,
-	"default_cpu_id":	0,
-	"process_category":	0,
+	"name":	"hid",
+	"title_id":	"0x0100000000000013",
+	"title_id_range_min":	"0x0100000000000013",
+	"title_id_range_max":	"0x0100000000000013",
+	"main_thread_stack_size":	"0x00003000",
+	"main_thread_priority":	18,
+	"default_cpu_id":	3,
+	"version":	"0x38000400",
 	"is_retail":	true,
-	"pool_partition":	0,
+	"pool_partition":	2,
 	"is_64_bit":	true,
 	"address_space_type":	3,
 	"filesystem_access":	{
-		"permissions":	"0xffffffffffffffff"
+		"permissions":	"0x0000000000100000"
 	},
-	"service_access":	["acc:u0", "aoc:u", "apm", "appletOE", "audin:u", "audout:u", "audren:u", "banana", "bcat:u", "bsd:u", "bsdcfg", "caps:su", "caps:u", "csrng", "friend:u", "fsp-srv", "hid", "htc", "htc:tenv", "htcs", "hwopus", "irs", "ldn:u", "ldr:ro", "lm", "mii:u", "mm:u", "nfc:mf:u", "nfc:user", "nfp:user", "nifm:u", "nim:eca", "nsd:u", "ntc", "nvdrv", "pcm", "pctl", "pl:u", "prepo:u", "set", "sfdnsres", "ssl", "time:u", "vi:u"],
-	"service_host":	[],
+	"service_access":	["erpt:c", "fatal:u", "ins:s", "psc:m", "bpc", "fsp-srv", "i2c", "uart", "gpio", "pinmux", "btdrv", "btm", "btm:sys", "ovln:snd", "usb:hs", "usb:qdb", "psm", "rgltr", "sasbus", "set:cal", "set:fd", "set:sys"],
+	"service_host":	["hid", "hid:dbg", "hid:hdr", "hid:sys", "hid:tmp", "hidbus", "irs", "irs:sys", "xcd:sys"],
 	"kernel_capabilities":	[{
 			"type":	"kernel_flags",
 			"value":	{
-				"highest_thread_priority":	59,
-				"lowest_thread_priority":	28,
-				"lowest_cpu_id":	0,
-				"highest_cpu_id":	2
+				"highest_thread_priority":	63,
+				"lowest_thread_priority":	12,
+				"lowest_cpu_id":	3,
+				"highest_cpu_id":	3
 			}
 		}, {
 			"type":	"syscalls",
@@ -157,19 +157,10 @@
 				"svcCallSecureMonitor":	"0x7f"
 			}
 		}, {
-			"type":	"application_type",
-			"value":	1
-		}, {
 			"type":	"min_kernel_version",
 			"value":	"0x0091"
 		}, {
 			"type":	"handle_table_size",
 			"value":	512
-		}, {
-			"type":	"debug_flags",
-			"value":	{
-				"allow_debug":	false,
-				"force_debug":	true
-			}
 		}]
 }
