@@ -28,16 +28,34 @@ uint64_t mapGcStick(int* stick_vals, uint32_t stick_min, uint16_t* stick_maxes) 
     return mapGcStickOriginal(stick_vals, stick_min, stick_maxes);
 }
 
+static const std::uint8_t MAP_GC_STICK_MASKS[] = {
+    0xE0, 0x83, 0xFF, 0xFF,
+    0x00, 0xFC, 0xDF, 0xFF,
+    0xE0, 0xFF, 0xE0, 0xFF,
+    0x00, 0xFC, 0xFF, 0xFF,
+    0x00, 0xFC, 0xFF, 0xFF,
+    0x1F, 0xFC, 0xFF, 0xFF
+};
+
 static const std::uint8_t MAP_GC_STICK_BYTES[] = {
-    0x09, 0x28, 0x40, 0x29, 0x28, 0x3c, 0x00, 0x12, 0xeb, 0x03, 0x08, 0x4b, 0x2c, 0x01, 0x08, 0x0b, 0x2d, 0x01, 0x08, 0x4b, 0x3f, 0x05, 0x00, 0x71
+    0x00, 0x00, 0x40, 0x29,
+    0x00, 0x3C, 0x00, 0x12,
+    0xE0, 0x03, 0x00, 0x4B,
+    0x00, 0x00, 0x08, 0x0B,
+    0x00, 0x00, 0x08, 0x4B,
+    0x1F, 0x04, 0x00, 0x71
 };
 
 static const std::uint8_t SVC_QUERY_MEMORY_BYTES[] = {
     0xe1, 0x0f, 0x1f, 0xf8, 0xc1, 0x00, 0x00, 0xd4
 };
 
-static const std::uint8_t HOST_SERVICE[] = {
+static const std::uint8_t HOST_SERVICE_1411[] = {
     0xfd, 0x7b, 0xbc, 0xa9, 0xf7, 0x0b, 0x00, 0xf9, 0xfd, 0x03, 0x00, 0x91, 0xf6, 0x57, 0x02, 0xa9, 0xf4, 0x4f, 0x03, 0xa9, 0xf7, 0x03, 0x04, 0xaa, 0xf4, 0x03, 0x03, 0x2a
+};
+
+static const std::uint8_t HOST_SERVICE_1500[] = {
+    0xff, 0x43, 0x01, 0xd1, 0xfd, 0x7b, 0x01, 0xa9, 0xfd, 0x43, 0x00, 0x91, 0xf8, 0x5f, 0x02, 0xa9, 0xf6, 0x57, 0x03, 0xa9, 0xf4, 0x4f, 0x04, 0xa9, 0xf8, 0x03, 0x04, 0xaa
 };
 
 static const std::uint8_t SET_SLEEP[] = {
@@ -46,6 +64,22 @@ static const std::uint8_t SET_SLEEP[] = {
 
 static std::uint8_t LAST_PACKET[37] = { 0 };
 
+uintptr_t find_offset_masked(const std::uint8_t* ptr, const std::uint8_t* masks, std::size_t size) {
+    const auto& info = exl::util::GetMainModuleInfo();
+    const std::uint8_t* end = reinterpret_cast<const std::uint8_t*>(info.m_Text.m_Start + info.m_Text.m_Size - size);
+    const std::uint8_t* start = reinterpret_cast<const std::uint8_t*>(info.m_Text.m_Start);
+    while (start != end) {
+        std::size_t i = 0;
+        for (; i < size; i++) {
+            if ((start[i] & masks[i]) != ptr[i])
+                break;
+        }
+        if (i == size)
+            return reinterpret_cast<uintptr_t>(start) - info.m_Text.m_Start;
+        start++;
+    }
+    return 0;
+}
 
 uintptr_t find_offset(const std::uint8_t* ptr, std::size_t size) {
     const auto& info = exl::util::GetMainModuleInfo();
@@ -90,7 +124,7 @@ void hdr_service_thread(void*) {
     *reinterpret_cast<bool*>(tls + 10) = false;
     tls[11] = 100;
 
-    Handle sm_handle = *reinterpret_cast<uint32_t*>(exl::util::modules::GetTargetOffset(0x35468c));
+    Handle sm_handle = *reinterpret_cast<uint32_t*>(exl::util::modules::GetTargetOffset(0x213ac4));
 
     R_ABORT_UNLESS(svcSendSyncRequest(sm_handle));
 
@@ -235,19 +269,26 @@ extern "C" void exl_main(void* x0, void* x1) {
     if (query_mem_offset == 0) {
         s_WereHooksInstalled = false;
     }
-    auto map_gc_stick = find_offset(MAP_GC_STICK_BYTES, sizeof(MAP_GC_STICK_BYTES));
-    if (map_gc_stick == 0)
+    auto map_gc_stick = find_offset_masked(MAP_GC_STICK_BYTES, MAP_GC_STICK_MASKS, sizeof(MAP_GC_STICK_BYTES));
+    if (map_gc_stick == 0) {
         s_WereHooksInstalled = false;
-    auto host_service = find_offset(HOST_SERVICE, sizeof(HOST_SERVICE));
-    if (host_service == 0)
-        s_WereHooksInstalled = false;
+    }
+    auto host_service = find_offset(HOST_SERVICE_1500, sizeof(HOST_SERVICE_1411));
+    if (host_service == 0) {
+        host_service = find_offset(HOST_SERVICE_1411, sizeof(HOST_SERVICE_1500));
+        if (host_service == 0) {
+            s_WereHooksInstalled = false;
+        }
+    }
     auto set_sleep = find_offset(SET_SLEEP, sizeof(SET_SLEEP));
-    if (set_sleep == 0)
+    if (set_sleep == 0) {
         s_WereHooksInstalled = false;
+    }
 
 
+    exl::hook::HookFunc(query_mem_offset, svcQueryMemoryHook, false);
     if (s_WereHooksInstalled) {
-        exl::hook::HookFunc(query_mem_offset, svcQueryMemoryHook, false);
+        // EXL_ABORT(0x423);
         mapGcStickOriginal = exl::hook::HookFunc(map_gc_stick, mapGcStick, true);
         HostServiceOriginal = exl::hook::HookFunc(host_service, HostServiceHook, true);
         SetSleepOrig = exl::hook::HookFunc(set_sleep, SetSleepHook, true);
