@@ -33,6 +33,13 @@
 #include "nx_hook.hpp"
 #include "util/sys/jit.hpp"
 
+#ifdef __align_up
+#undef __align_up
+#endif
+
+#ifdef __align_down
+#undef __align_down
+#endif
 
 #define __attribute __attribute__
 #define aligned(x) __aligned__(x)

@@ -10,6 +10,9 @@ namespace exl::util {
         size_t m_Size;
 
         constexpr uintptr_t GetEnd() const { return m_Start + m_Size; }
+        constexpr bool Contains(uintptr_t addr) const {
+            return (m_Start <= addr) && (addr < GetEnd());
+        }
     };
 
     struct ModuleInfo {
