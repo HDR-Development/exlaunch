@@ -39,9 +39,6 @@ static const std::uint8_t RECENTER_GC_STICK_BYTES[] = {
     0x09, 0x04, 0x40, 0x79, 
     0x2a, 0x04, 0x40, 0x79, 
     0x29, 0x01, 0x0a, 0x4b, 
-    0x28, 0x7d, 0x60, 0xb3, 
-    0xe0, 0x03, 0x08, 0xaa, 
-    0xc0, 0x03, 0x5f, 0xd6 
 };
 
 /* Simple byte search code that will search for a sequence of bytes in the .text region and return it as an offset */
@@ -414,6 +411,7 @@ extern "C" void exl_main(void* x0, void* x1) {
     /* If we can't find the offsets, don't even bother searching for the rest since we won't be able to turn them on */
     if ((connect_to_named_port_offset == 0) || (hid_sys == 0)) {
         /* No point in setting FAILURE_REASON here since the game cannot query or it */
+        exl::hook::CallTargetEntrypoint(x0, x1);
         return;
     }
 
@@ -425,6 +423,7 @@ extern "C" void exl_main(void* x0, void* x1) {
     /* If we can't find the offset, just set our failure reason, which can be queried from the hid:hdr service */
     if (recenter_gc_sticks == 0) {
         FAILURE_REASON = 1;
+        exl::hook::CallTargetEntrypoint(x0, x1);
         return;
     }
 
@@ -435,6 +434,7 @@ extern "C" void exl_main(void* x0, void* x1) {
 
     if (first == 0) {
         FAILURE_REASON = 2;
+        exl::hook::CallTargetEntrypoint(x0, x1);
         return;
     }
 
@@ -442,6 +442,7 @@ extern "C" void exl_main(void* x0, void* x1) {
 
     if (second == 0) {
         FAILURE_REASON = 3;
+        exl::hook::CallTargetEntrypoint(x0, x1);
         return;
     }
 
