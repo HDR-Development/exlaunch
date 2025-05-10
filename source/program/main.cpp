@@ -123,7 +123,7 @@ uintptr_t find_offset_that_calls(uintptr_t target, size_t count) {
 }
 
 /* Finds the function that takes "hid:sys" as an argument on the x4 register*/
-uintptr_t find_offset_for_hid_sys() {
+uintptr_t find_offset_for_hid_sys_pre_20() {
     /* This mask + target combo is for finding an adrp instruction that loads to x4*/
     const uint32_t ADRP_MASK = 0x9F00001F;
     const uint32_t ADRP_TARGET = 0x90000004;
@@ -197,6 +197,82 @@ uintptr_t find_offset_for_hid_sys() {
     return 0;
 }
 
+uintptr_t find_offset_for_hid_sys() {
+    /* This mask + target combo is for finding an adrp instruction that loads to x4*/
+    const uint32_t ADRP_MASK = 0x9F00001F;
+    const uint32_t ADRP_TARGET = 0x90000008;
+
+    /* This mask + target combo is for finding an add instruction of the form add x4, x4, #imm */
+    const uint32_t ADD_MASK = 0xFFC003FF;
+    const uint32_t ADD_TARGET = 0x91000108;
+
+    /* This mask + target combo is for finding an instruction that is BL */
+    const uint32_t BL_MASK = 0x9C000000;
+    const uint32_t BL_TARGET = 0x94000000;
+
+    /* Start by getting our .text region for main */
+    const auto& info = exl::util::GetMainModuleInfo();
+    const std::uint8_t* end = reinterpret_cast<const std::uint8_t*>(info.m_Text.m_Start + info.m_Text.m_Size - 4);
+    const std::uint8_t* start = reinterpret_cast<const std::uint8_t*>(info.m_Text.m_Start);
+
+    /* We also want these, because when we encounter a BL instruction we want to see if our x4 register is in a */
+    /* state where we can safely dereference it without causing a panic */
+    const auto& rodata = info.m_Rodata;
+    const auto& data = info.m_Data;
+
+    /* The x4 register that we are going to pseudo-emulate */
+    uint64_t x_4_register = 0;
+
+    while (start != end) {
+        /* Fetch the instruction at our current offset */
+        const std::uint32_t instruction = *reinterpret_cast<const uint32_t*>(start);
+
+        if ((instruction & ADRP_MASK) == ADRP_TARGET) {
+            /* If we have confirmed that it is an adrp instruction, fetch the offset from the current PC that it is going to be */
+            /* loading into x4 and reconstruct it */
+            uint64_t imm_lo = static_cast<uint64_t>((instruction & 0x60000000) >> 29);
+            uint64_t imm_hi = static_cast<uint64_t>((instruction & 0x00FFFFE0) >> 5);
+            uint64_t addr = (imm_lo << 12) | (imm_hi << 14);
+
+            /* Mimic the adrp instruction to edit our x4 register, note that this is an assignment instead of an add-assign */
+            x_4_register = (addr + (reinterpret_cast<uint64_t>(start) & ~0xFFF));
+        } else if ((instruction & ADD_MASK) == ADD_TARGET) {
+            /* Easier, if we have an add instruction then just pull out the immediate value and add it to our x4 register */
+            uint64_t imm = static_cast<uint64_t>((instruction & 0x003FFC00) >> 10);
+            x_4_register += imm;
+        } else if ((instruction & BL_MASK) == BL_TARGET) {
+            /* A little bit harder but we've done this before, since it's a BL instruction, mask out the imm bits*/
+            const int32_t u_offset = instruction & 0x3FFFFFF;
+            int32_t offset = 0;
+
+            /* Check if the offset is negative for sign extension */
+            if ((u_offset & 0x2000000) != 0) {
+                /* Perform a sign extension on the immediate so when we add it to our address it is a proper offset */
+                offset = 0xFC000000 | u_offset;
+            } else {
+                offset = u_offset;
+            }
+
+            /* Calculate the offset from the start of main to where we are jumping */
+            const uintptr_t hid_sys_offset = static_cast<uintptr_t>(reinterpret_cast<intptr_t>(start) + (offset * 4)) - info.m_Text.m_Start;
+
+            /* Check if the x4 register is in a dereferencable state, and if it is check if it contains "hid:sys" */
+            if (rodata.Contains(static_cast<uintptr_t>(x_4_register)) || data.Contains(static_cast<uintptr_t>(x_4_register))) {
+                if (*reinterpret_cast<const uint64_t*>(x_4_register) == *reinterpret_cast<const uint64_t*>("hid:sys")) {
+                    return hid_sys_offset;
+                }
+            }
+        }
+        
+        /* We didn't get what we want so keep moving */
+        start += 4;
+    }
+
+    return find_offset_for_hid_sys_pre_20();
+}
+
+
+
 uint64_t (*mapGcStick1)(int*, uint32_t, uint16_t*) = nullptr;
 uint64_t (*mapGcStick2)(int*, uint32_t, uint16_t*) = nullptr;
 int32_t (*hostService)(uint64_t, uint32_t, uint64_t, uint64_t, uint64_t) = nullptr;
@@ -269,6 +345,7 @@ void hdr_service_thread(void*) {
     /* Parse out the service handle and the result from the buffer */
     const std::uint8_t* tls2 = reinterpret_cast<const std::uint8_t*>(armGetTls());
     Handle service_handle = *reinterpret_cast<const Handle*>(tls2 + 0xC);
+    (void)service_handle;
     Result result = *reinterpret_cast<const Result*>(tls2 + 0x18);
 
     /* If our request failed, silently fail. It most likely means that the user does not have the modded main.npdm so that we can host our hid:hdr service */
@@ -277,6 +354,8 @@ void hdr_service_thread(void*) {
     }
 
     while (true) {
+    //     svcSleepThread(0);
+    // }
         /* Index required for the svc return value */
         s32 index = 0;
 
@@ -408,6 +487,9 @@ extern "C" void exl_main(void* x0, void* x1) {
     /* Same reasoning applies to this offset, if we can't find this offset then we are unable to host our service */
     auto hid_sys = find_offset_for_hid_sys();
 
+    // EXL_ABORT(hid_sys);
+    // if (hid_sys == 0) EXL_ABORT(0);
+
     /* If we can't find the offsets, don't even bother searching for the rest since we won't be able to turn them on */
     if ((connect_to_named_port_offset == 0) || (hid_sys == 0)) {
         /* No point in setting FAILURE_REASON here since the game cannot query or it */
@@ -416,7 +498,8 @@ extern "C" void exl_main(void* x0, void* x1) {
     }
 
     exl::hook::HookFunc(connect_to_named_port_offset, svcConnectToNamedPortHook, false);
-    hostService = reinterpret_cast<int32_t(*)(uint64_t, uint32_t, uint64_t, uint64_t, uint64_t)>(exl::hook::HookFunc(hid_sys, hostServiceHook, true));
+    hostService = reinterpret_cast<int32_t(*)(uint64_t, uint32_t, uint64_t, uint64_t, uint64_t)>(exl::hook::HookFunc(0x10f34, hostServiceHook, true));
+    // hostService = reinterpret_cast<int32_t(*)(uint64_t, uint32_t, uint64_t, uint64_t, uint64_t)>(exl::hook::HookFunc(hid_sys, hostServiceHook, true));
 
     auto recenter_gc_sticks = find_pointer(RECENTER_GC_STICK_BYTES, sizeof(RECENTER_GC_STICK_BYTES));
 
