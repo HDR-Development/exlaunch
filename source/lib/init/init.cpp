@@ -25,7 +25,7 @@ extern "C" {
         fake_heap_start = __fake_heap;
         fake_heap_end   = __fake_heap + exl::setting::HeapSize;
     }
-    
+
     #endif
 
     void __init_array(void) {
@@ -40,7 +40,7 @@ extern "C" {
         for (i = 0; i < count; i++)
             __init_array_start[i] ();
     }
-    
+
     /* Called when loaded as a module with RTLD. */
     void exl_module_init() {
         #ifdef EXL_USE_FAKEHEAP
